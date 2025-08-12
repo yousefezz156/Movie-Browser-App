@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Movie Browser App</string>
+    <string name="search">Search Movie</string>
+    <string name="popular_movie">Popular Movie</string>
+</resources>
