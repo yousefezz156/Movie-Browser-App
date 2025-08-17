@@ -28,6 +28,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -53,8 +55,8 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.room.util.query
 import com.example.moviebrowserapp.R
 import com.example.moviebrowserapp.mainscreen.entity.searchqueryentites.searchqueryUi.SearchQueryUi
-import com.example.moviebrowserapp.mainscreen.presentation.SearchQueryCardView
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -63,17 +65,23 @@ fun MainScreenScaffold(
     navController: NavController,
     modifier: Modifier = Modifier
 ) {
+
     Scaffold(
         topBar = {
             TopAppBar(title = { Text(text = stringResource(id = R.string.popular_movie)) })
         }
     ) { innerPadding ->
+
         Box(modifier = modifier.padding(innerPadding)) {
-            MainScreen(movieListViewModel = movieListViewModel, navController = navController)
+            MainScreen(
+                movieListViewModel = movieListViewModel,
+                navController = navController
+            )
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
     movieListViewModel: MovieListViewModel,
@@ -81,39 +89,92 @@ fun MainScreen(
     modifier: Modifier = Modifier
 ) {
     val state by movieListViewModel.state.collectAsState()
-    var query by rememberSaveable { mutableStateOf("") }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(color = Color.Black)
+    val movie = movieListViewModel.moviePage.collectAsLazyPagingItems()
+    val isRefreshing = movie.loadState.refresh is LoadState.Loading
+
+    val coroutineScope = rememberCoroutineScope()
+
+//    // Check network status when screen is displayed
+//    LaunchedEffect(Unit) {
+//        movieListViewModel.events(MainScreenIntent.CheckNetworkConnection)
+//    }
+
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            coroutineScope.launch {
+                movieListViewModel.events(MainScreenIntent.RefreshScreen)
+            }
+        }
     ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = {
-                query=it
-                //movieListViewModel.events(MainScreenIntent.SearchQuery(query = query))
-                movieListViewModel.searchQuery(it)
+        if (state.isOffline) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(text = "No Network Connection", color = Color.Red, fontSize = 12.sp)
+                Spacer(modifier = Modifier.height(16.dp))
+                LazyColumn {
+                    items(state.movieListOffline) { movie ->
+                        MovieCard(
+                            navController = navController,
+                            id = movie.id,
+                            posterPath = movie.poster_path,
+                            title = movie.title,
+                            height = 190.dp,
+                            width = 140.dp
+                            )
+                    }
+                }
+            }
 
-            },
-            label = { Text(text = stringResource(id = R.string.search)) },
-            placeholder = { Text(text = "Search for movies...") },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-        )
-        if (state.searchQuery.isBlank()) {
-            LazyColumnListOfMovies(
-                movieListViewModel = movieListViewModel,
-                navController = navController
-            )
         } else {
-            LazyColumnForListOfSearchQuery(
-                movieListViewModel = movieListViewModel,
-                navController = navController,
-                searchQuery = state.searchQuery,
-            )
+
+            Column(
+                modifier = modifier
+                    .fillMaxSize()
+                    .background(color = Color.Black)
+            ) {
+                // Show offline status if applicable
+                if (state.error != null && state.error!!.contains("offline")) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Yellow.copy(alpha = 0.2f))
+                            .padding(8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = state.error!!,
+                            color = Color.Yellow,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = state.searchQuery,
+                    onValueChange = {
+                        movieListViewModel.events(MainScreenIntent.SearchQuery(it))
+                    },
+                    label = { Text(text = stringResource(id = R.string.search)) },
+                    placeholder = { Text(text = "Search for movies...") },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                if (state.searchQuery.isBlank()) {
+                    LazyColumnListOfMovies(
+                        movieListViewModel = movieListViewModel,
+                        navController = navController
+                    )
+                } else {
+                    LazyColumnForListOfSearchQuery(
+                        movieListViewModel = movieListViewModel,
+                        navController = navController,
+                        searchQuery = state.searchQuery,
+                    )
+                }
+            }
         }
     }
 }
@@ -144,7 +205,14 @@ fun LazyColumnListOfMovies(
             LazyColumn {
                 items(list.itemCount) { item ->
                     list[item]?.let { movieData ->
-                        MovieCardView(movieListUi = movieData, navController = navController)
+                        MovieCard(
+                            navController = navController,
+                            id = movieData.id,
+                            posterPath = movieData.poster_path,
+                            title = movieData.title,
+                            height = 190.dp,
+                            width = 140.dp
+                        )
                     }
                 }
             }
@@ -158,23 +226,43 @@ fun LazyColumnForListOfSearchQuery(
     navController: NavController,
     searchQuery: String,
 ) {
+    val searchResults = movieListViewModel.searchPage.collectAsLazyPagingItems()
 
-    val searchResults = movieListViewModel.searchPage?.collectAsLazyPagingItems()
-
-    var query by remember {
-        mutableStateOf("")
-    }
     LaunchedEffect(searchQuery) {
-        if (query != searchQuery) {
-            searchResults?.refresh()
-            query = searchQuery
-        } else
-            query = searchQuery
+        if (searchQuery.isNotBlank() && searchResults != null) {
+            // Only refresh if we don't have results yet or if the query actually changed
+            if (searchResults.itemCount == 0 || searchResults.loadState.refresh !is LoadState.NotLoading) {
+                searchResults.refresh()
+            }
+        }
     }
 
+    // Handle case when searchResults is null (search page not created yet)
+    if (searchResults == null) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                CircularProgressIndicator(color = Color.Yellow)
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Preparing search for \"$searchQuery\"...",
+                    color = Color.Yellow,
+                    fontSize = 16.sp
+                )
+            }
+        }
+        return
+    }
 
-//     Check if search results are loaded and update loading state
-    if (searchResults?.loadState?.refresh is LoadState.Loading && searchQuery.isBlank()) {
+    // Check if search results are loaded and update loading state
+    if (searchResults.loadState.refresh is LoadState.Loading && searchResults.itemCount == 0) {
+        // Only show loading if we don't have any results yet
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -193,7 +281,7 @@ fun LazyColumnForListOfSearchQuery(
                 )
             }
         }
-    } else if (searchResults?.itemCount == 0) {
+    } else if (searchResults.itemCount == 0) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -208,20 +296,42 @@ fun LazyColumnForListOfSearchQuery(
                     color = Color.Yellow,
                     fontSize = 16.sp
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Try different keywords or check spelling",
+                    color = Color.Gray,
+                    fontSize = 14.sp
+                )
             }
         }
     } else {
-
         LazyColumn {
-            items(searchResults!!.itemCount) { index ->
+            items(searchResults.itemCount) { index ->
                 searchResults[index]?.let { result ->
-                    SearchQueryCardView(
+                    MovieCard(
                         navController = navController,
-                        searchQueryUi = result
+                        id = result.id,
+                        posterPath = result.poster_path,
+                        title = result.title,
+                        height = 120.dp,
+                        width = 120.dp
                     )
                 }
             }
 
+            // Show loading indicator for pagination
+            if (searchResults.loadState.append is LoadState.Loading) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator(color = Color.Yellow)
+                    }
+                }
+            }
         }
     }
 }

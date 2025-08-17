@@ -20,19 +20,26 @@ class DetailsViewModel @Inject constructor(val useCase: DetailsUseCase ): ViewMo
 
     private var _error = MutableStateFlow<String?>(null)
     var error : StateFlow<String?> = _error.asStateFlow()
+    private var _isLoading = MutableStateFlow(true)
+    var isLoading : StateFlow<Boolean> = _isLoading.asStateFlow()
 
 
 
-  fun getDetails(movieId : Int){
-
-      _details.value = null
+  fun getDetails(movieId : Int) {
+      viewModelScope.launch {
+          _isLoading.value = true
+          _details.value = null
           viewModelScope.launch {
               try {
                   _details.value = useCase.invokeDetails(movieId)
 
-              } catch (e : Exception){
+
+              } catch (e: Exception) {
                   _error.value = e.message ?: "Failed To Load Details"
+              } finally {
+                  _isLoading.value = false
               }
           }
-    }
+      }
+  }
 }

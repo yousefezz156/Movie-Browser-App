@@ -7,75 +7,44 @@ import com.example.moviebrowserapp.database.MovieEntity
 import com.example.moviebrowserapp.database.MovieFirstListDao
 import com.example.moviebrowserapp.mainscreen.entity.movielistentites.movielistui.MovieListUi
 import com.example.moviebrowserapp.network.CheckNetworkConnection
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MoviePaginationImpl(
-    val movieListUseCase: MovieListUseCase,
-    val networkConnectionction: CheckNetworkConnection,
-    val dao: MovieFirstListDao
+    val useCase: MovieListUseCase,
+    val checkNetworkConnection: CheckNetworkConnection,
 ) : PagingSource<Int, MovieListUi>() {
 
     override fun getRefreshKey(state: PagingState<Int, MovieListUi>): Int? {
         return state.anchorPosition?.let { anchorPosition ->
             val anchorPage = state.closestPageToPosition(anchorPosition)
-
             anchorPage?.prevKey?.plus(1) ?: anchorPage?.nextKey?.minus(1)
         }
     }
 
-    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, MovieListUi> {
-        Log.d("PagingDebug", "Loading page ${params.key} with loadSize ${params.loadSize}")
+    override suspend fun load(params: LoadParams<Int>): LoadResult<Int, MovieListUi> = withContext(Dispatchers.IO) {
 
-
-        kotlin.runCatching {
-            val page = params.key ?: 1
-            if (page == 1 && !networkConnectionction.isOnline()) {
-                val list = dao.getAllMovies()
-                val show = list.map { i ->
-                    MovieListUi(
-                        id = i.id,
-                        title = i.title,
-                        poster_path = i.poster_path
-                    )
-                }
-                return LoadResult.Page(
-                    data = show,
-                    prevKey = null,
-                    nextKey = null
-                )
-            } else {
-                val response = movieListUseCase.callMovieList(page)
-                dao.insertAll(response.movieList.map { i ->
-                    MovieEntity(
-                        id = i.id,
-                        title = i.title,
-                        poster_path = i.poster_path
-                    )
-                })
-                if (response.movieList.isEmpty()) {
-                    return LoadResult.Page(
-                        data = emptyList(),
-                        prevKey = null,
-                        nextKey = null
-                    )
-                } else {
-                    return LoadResult.Page(
-                        data = response.movieList,
-                        prevKey = null,
-                        nextKey = if (response.movieList.size < 20) null else page + 1
-                    )
-                }
-            }
-        }.onFailure {
-            return LoadResult.Error(it)
+        if (!checkNetworkConnection.isOnline()) {
+            return@withContext LoadResult.Error(Exception("No internet connection"))
         }
 
-        return LoadResult.Page(
-            data = arrayListOf(),
-            prevKey = null,
-            nextKey = null
-        )
+        try {
+            val page = params.key ?: 1
+            Log.d("PagingDebug", "Calling useCase for page: $page")
 
+            val response = useCase.callMovieList(page)
+            Log.d("PagingDebug", "Received response with ${response.movieList.size} movies")
+
+
+            return@withContext LoadResult.Page(
+                data = response.movieList,
+                prevKey =  null,
+                nextKey = if (response.movieList.size < 20) null else page + 1            )
+        } catch (e: Exception) {
+            Log.e("PagingDebug", "Error loading page ${params.key}: ${e.message}", e)
+            return@withContext LoadResult.Error(e)
+        }
     }
-
 }

@@ -5,6 +5,8 @@ import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import com.example.moviebrowserapp.mainscreen.entity.searchqueryentites.searchqueryUi.SearchQueryUi
 import com.example.moviebrowserapp.network.CheckNetworkConnection
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 class SearchQueryPaginationImpl @Inject constructor(val useCase: SearchQueryUseCase, val query: String, val checkNetworkConnection: CheckNetworkConnection): PagingSource<Int, SearchQueryUi>() {
@@ -29,11 +31,11 @@ class SearchQueryPaginationImpl @Inject constructor(val useCase: SearchQueryUseC
 
             return LoadResult.Page(
                 data = response.results,
-                prevKey = if (page == 1) null else page - 1,
-                nextKey = if (response.results.size < 20) null else page + 1
+                prevKey = null,
+                nextKey = if (response.results.size<20) page + 1 else null
             )
         } catch (e: Exception) {
-            Log.d("PagingDebug", "Error loading page: ${e.message}")
+            Log.e("SearchPaging", "Error loading page ${params.key}: ${e.message}", e)
             return LoadResult.Error(e)
         }
     }

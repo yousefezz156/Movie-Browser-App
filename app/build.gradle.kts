@@ -86,6 +86,8 @@ dependencies {
     //Gson
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 
+    //
+    implementation ("com.google.accompanist:accompanist-placeholder-material:0.36.0")
     //Room
 
     implementation(libs.androidx.room.runtime) // Update this to latest

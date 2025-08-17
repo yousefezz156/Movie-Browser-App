@@ -13,5 +13,6 @@ data class MainScreenState(
     val isLoading : Boolean = false,
     val isRefreshingScreen: Boolean = false,
     val error : String? = null,
-    val movieList : List<MovieEntity> = emptyList(),
+    val movieListOffline : List<MovieListUi> = emptyList(),
+    val isOffline : Boolean = false,
 )

@@ -1,8 +1,8 @@
 package com.example.moviebrowserapp.mainscreen.entity.movielistentites
 
-data class MoiveListResponse(
+data class MovieListResponse(
     val page :Int,
-    val results:Array<MovieBody>,
+    val results:List<MovieBody>,
     val total_page :Int,
-    val total_pages :Int
+    val total_results :Int
 )

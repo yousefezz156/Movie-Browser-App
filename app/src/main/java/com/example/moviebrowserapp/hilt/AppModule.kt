@@ -19,6 +19,7 @@ import com.example.moviebrowserapp.network.Network
 import com.example.moviebrowserapp.network.Network.baseUrl
 import com.example.moviebrowserapp.network.Network.provideLogIntercept
 import com.example.moviebrowserapp.network.Network.token
+import com.example.moviebrowserapp.network.httpsurlconnection.MovieHttpsUrlConnection
 import com.jakewharton.retrofit2.adapter.kotlin.coroutines.CoroutineCallAdapterFactory
 import dagger.Module
 import dagger.Provides
@@ -66,14 +67,24 @@ object AppModule {
         }.build()
 
     }
+
+    @Provides
+    @Singleton
+    fun provideMovieHttpsUrlConnection(): MovieHttpsUrlConnection {
+        return MovieHttpsUrlConnection()
+    }
     @Provides
     fun provideSearchQueryApiServices(retrofit: Retrofit): SearchQueryApiServices {
         return retrofit.create(SearchQueryApiServices::class.java)
     }
 
-    @Provides
-    fun provideMovieListApiServices(retrofit: Retrofit): MovieListApiServices {
-        return retrofit.create(MovieListApiServices::class.java)
+//    @Provides
+//    fun provideMovieListApiServices(retrofit: Retrofit): MovieListApiServices {
+//        return retrofit.create(MovieListApiServices::class.java)
+//    }
+
+    @Provides  fun provideMovieListApiServicesHttpsUrl(api : MovieHttpsUrlConnection) : MovieListRepository{
+        return MovieListRepository(api)
     }
     @Provides
 
@@ -85,10 +96,10 @@ object AppModule {
     fun provideSearchQueryRepo(api: SearchQueryApiServices): SearchQueryRepo {
         return SearchQueryRepo(api)
     }
-    @Provides
-    fun provideMovieListRepo(api: MovieListApiServices, dao: MovieFirstListDao): MovieListRepository {
-        return MovieListRepository(dao,api)
-    }
+//    @Provides
+//    fun provideMovieListRepo(api: MovieListApiServices): MovieListRepository {
+//        return MovieListRepository(api)
+//    }
     @Provides
 
     fun provideDetailsRepo(api: DetailsApiServices): DetailsRepo {
